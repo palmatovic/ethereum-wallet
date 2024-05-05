@@ -5,15 +5,14 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"io"
-	"math"
-	"net/http"
-	"strconv"
-
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"io"
+	"math"
+	"net/http"
+	"strconv"
 )
 
 // Account rappresenta un account Ethereum
@@ -57,6 +56,11 @@ func main() {
 			if err := db.Create(&account).Error; err != nil {
 				fmt.Println("error during create account:", err)
 			}
+			fmt.Println("Account found with balance greater than 0:")
+			fmt.Println("Private Key:", account.PrivateKey)
+			fmt.Println("Public Key:", account.PublicKey)
+			fmt.Println("Address:", account.Address)
+			fmt.Println("Balance:", account.Balance)
 		}
 	}
 }
