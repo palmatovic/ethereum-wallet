@@ -113,6 +113,11 @@ func main() {
 		defer mu.Unlock()
 		usedUrls[url] = true
 	}
+	markUnused := func(url string) {
+		mu.Lock()
+		defer mu.Unlock()
+		usedUrls[url] = false
+	}
 
 	// Funzione per verificare se una URL è stata utilizzata in modo thread-safe
 	isUsed := func(url string) bool {
@@ -139,6 +144,7 @@ func main() {
 					if !isUsed(url) {
 						markUsed(url)
 						balanceInEther, err = getAccountBalance(url, address)
+						markUnused(url)
 						if err == nil {
 							break
 						}
