@@ -117,6 +117,7 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 		usedUrls[url] = false
+		time.Sleep(time.Second * 10)
 	}
 
 	// Funzione per verificare se una URL è stata utilizzata in modo thread-safe
