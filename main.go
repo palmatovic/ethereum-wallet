@@ -57,6 +57,7 @@ func main() {
 	urls := []string{
 		"https://weathered-restless-spree.quiknode.pro/67256ba45eaf985ad6528c8145071d80203bd9b0/",
 		"https://intensive-aged-theorem.quiknode.pro/8f60643fdd3a671086701484c224d97953d429d4/",
+		"https://powerful-dark-arrow.quiknode.pro/9d597ababb1e41384501769cafa4626f7f51b39f/",
 		"https://eth-mainnet.g.alchemy.com/v2/owUCVigVvnHA63o0C6mh3yrf3jxMkV7b",
 		"https://cloudflare-eth.com",
 		"https://rpc.flashbots.net/",
@@ -264,6 +265,9 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == 429 {
+			time.Sleep(time.Second * 30)
+		}
 		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
