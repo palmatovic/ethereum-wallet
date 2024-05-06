@@ -250,7 +250,17 @@ func getAccountBalance(url string, address string) (float64, error) {
 		return 0, err
 	}
 
-	weiBalance := result["result"].(string)
+	var weiBalance string
+	if result["result"] != nil {
+		if str, ok := result["result"].(string); ok {
+			weiBalance = str
+		}
+	}
+
+	if weiBalance == "" {
+		return 0.00, nil
+	}
+
 	balanceInWei, err := strconv.ParseInt(weiBalance, 0, 64)
 	if err != nil {
 		return 0, err
