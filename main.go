@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Account rappresenta un account Ethereum
@@ -140,6 +141,9 @@ func main() {
 	// Canale per limitare il numero di goroutine attive
 	semaphore := make(chan struct{}, len(urls))
 
+	// Contatore dei successi
+	var successCount int
+
 	var wg sync.WaitGroup
 	for _, url := range urls {
 		semaphore <- struct{}{} // Acquisisci un semaforo per avviare una nuova goroutine
@@ -177,6 +181,8 @@ func main() {
 						}
 					}
 				}
+			} else {
+				successCount++ // Incrementa il conteggio dei successi
 			}
 
 			resultChannel <- Account{
@@ -187,6 +193,14 @@ func main() {
 			}
 		}(url)
 	}
+
+	// Avvia una goroutine per visualizzare il conteggio dei successi
+	go func() {
+		for {
+			fmt.Printf("Numero di successi finora: %d\n", successCount)
+			time.Sleep(5 * time.Minute) // Aggiorna ogni 5 minuti
+		}
+	}()
 
 	wg.Wait()            // Aspetta che tutte le goroutine siano completate
 	close(resultChannel) // Chiudi il canale dei risultati per terminare la goroutine di elaborazione
