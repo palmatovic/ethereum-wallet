@@ -5,10 +5,15 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"github.com/caarlos0/env/v6"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
-	"gorm.io/driver/sqlite"
+	"github.com/sirupsen/logrus"
+	sql "gorm.io/driver/mysql"
+
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"io"
 	"math"
 	"net/http"
@@ -26,8 +31,28 @@ type Account struct {
 	Balance    float64
 }
 
+type Environment struct {
+	Username string `env:"username,required"`
+	Password string `env:"password,required"`
+	Address  string `env:"address,required"`
+	Port     int    `env:"port,required"`
+	Name     string `env:"name,required"`
+}
+
 func main() {
-	db := initDatabase()
+
+	var err error
+	var e Environment
+	if err = env.Parse(&e); err != nil {
+		logrus.WithError(err).Panic("cannot configure environment variables")
+	}
+	db := initDatabase(databaseConfig{
+		Username: e.Username,
+		Password: e.Password,
+		Address:  e.Address,
+		Port:     e.Port,
+		Name:     e.Name,
+	})
 
 	urls := []string{
 		"https://weathered-restless-spree.quiknode.pro/67256ba45eaf985ad6528c8145071d80203bd9b0/",
@@ -41,7 +66,6 @@ func main() {
 		"https://1rpc.io/eth",
 		"https://ethereum.publicnode.com",
 		"https://rpc.payload.de",
-		"https://llamanodes.com/",
 		"https://eth.api.onfinality.io/public",
 		"https://eth.merkle.io",
 		"https://eth.drpc.org",
@@ -76,38 +100,31 @@ func main() {
 		"https://services.tokenview.io/vipapi/nodeservice/eth?apikey=qVHq2o6jpaakcw3lRstl",
 		"https://rpc.tenderly.co/fork/c63af728-a183-4cfb-b24e-a92801463484",
 		"https://eth-mainnet.g.alchemy.com/v2/demo",
-		"https://api.zmok.io/mainnet/oaen6dy8ff6hju9k",
 		"https://openapi.bitstack.com/v1/wNFxbiJyQsSeLrX8RRCHi7NpRxrlErZk/DjShIqLishPCTB9HiMkPHXjUM9CNM9Na/ETH/mainnet",
 		"https://endpoints.omniatech.io/v1/eth/mainnet/public",
 		"https://eth-mainnet.nodereal.io/v1/1659dfb40aa24bbb8153a677b98064d7",
 	}
 
-	// Canale per inviare e ricevere risultati
 	resultChannel := make(chan Account)
-
-	// Goroutine per la comunicazione con il canale principale e l'elaborazione dei risultati
 	go func() {
 		for account := range resultChannel {
 			if account.Balance > 0 {
-				fmt.Println("Account found with balance greater than 0:")
-				fmt.Println("Private Key:", account.PrivateKey)
-				fmt.Println("Public Key:", account.PublicKey)
-				fmt.Println("Address:", account.Address)
-				fmt.Println("Balance:", account.Balance)
-
-				// Salva l'account nel database
-				if err := db.Create(&account).Error; err != nil {
-					fmt.Println("error during create account:", err)
+				logrus.WithFields(
+					logrus.Fields{
+						"private_key": account.PrivateKey,
+						"public_key":  account.PublicKey,
+						"address":     account.Address,
+						"balance":     account.Balance,
+					}).Infof("found account")
+				if err = db.Create(&account).Error; err != nil {
+					logrus.WithError(err).Errorf("error during create account")
 				}
 			}
 		}
 	}()
 
-	// Mutex per la gestione thread-safe delle URL utilizzate
 	var mu sync.Mutex
-	usedUrls := make(map[string]bool) // Mappa per tenere traccia delle URL utilizzate
-
-	// Funzione per segnare una URL come utilizzata in modo thread-safe
+	usedUrls := make(map[string]bool)
 	markUsed := func(url string) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -118,14 +135,11 @@ func main() {
 		defer mu.Unlock()
 		usedUrls[url] = false
 	}
-
-	// Funzione per verificare se una URL è stata utilizzata in modo thread-safe
 	isUsed := func(url string) bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return usedUrls[url]
 	}
-
 	var semaphore = make(chan struct{}, len(urls))
 	var wg sync.WaitGroup
 	for {
@@ -136,14 +150,16 @@ func main() {
 				<-semaphore // Release semaphore
 				wg.Done()
 			}()
-			privateKey, err := generatePrivateKey()
-			if err != nil {
-				fmt.Println("error generating private key:", err)
+			var errGoRoutine error
+			var privateKey *ecdsa.PrivateKey
+			if privateKey, errGoRoutine = generatePrivateKey(); errGoRoutine != nil {
+				logrus.WithError(err).Errorf("error generating private key")
 				return
 			}
-			address, publicKeyBytes, err := getAddressAndPublicKey(privateKey)
-			if err != nil {
-				fmt.Println("error generating address and public key:", err)
+			var address string
+			var publicKeyBytes []byte
+			if address, publicKeyBytes, errGoRoutine = getAddressAndPublicKey(privateKey); errGoRoutine != nil {
+				logrus.WithError(errGoRoutine).Errorf("error generating address and public key")
 				return
 			}
 			var balanceInEther float64
@@ -162,7 +178,6 @@ func main() {
 					break
 				}
 			}
-
 			resultChannel <- Account{
 				PrivateKey: hexutil.Encode(crypto.FromECDSA(privateKey)),
 				PublicKey:  hexutil.Encode(publicKeyBytes),
@@ -173,11 +188,36 @@ func main() {
 	}
 }
 
-func initDatabase() *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("accounts.db"), &gorm.Config{})
-	if err != nil {
+type databaseConfig struct {
+	Username string
+	Password string
+	Address  string
+	Port     int
+	Name     string
+}
+
+func initDatabase(dbConfig databaseConfig) *gorm.DB {
+	configDB := mysql.Config{
+		User:                 dbConfig.Username,
+		Passwd:               dbConfig.Password,
+		Addr:                 fmt.Sprintf("%s:%d", dbConfig.Address, dbConfig.Port),
+		Net:                  "tcp",
+		DBName:               dbConfig.Name,
+		Loc:                  time.UTC,
+		ParseTime:            true,
+		AllowNativePasswords: true,
+	}
+
+	connectionString := configDB.FormatDSN()
+
+	var db *gorm.DB
+	var err error
+	if db, err = gorm.Open(sql.Open(connectionString), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	}); err != nil {
 		panic(err)
 	}
+
 	if err = db.AutoMigrate(&Account{}); err != nil {
 		panic(err)
 	}
@@ -223,10 +263,7 @@ func getAccountBalance(url string, address string) (float64, error) {
 		_ = Body.Close()
 	}(resp.Body)
 
-	time.Sleep(10 * time.Second)
-
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("unexpected status code: %d, url: %s, address: %s\n", resp.StatusCode, url, address)
 		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
@@ -248,7 +285,6 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}
 
 	if weiBalance == "" {
-		fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, 0.00)
 		return 0.00, nil
 	}
 
@@ -257,6 +293,5 @@ func getAccountBalance(url string, address string) (float64, error) {
 		return 0, err
 	}
 	balanceInEther := float64(balanceInWei) / math.Pow10(18)
-	fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, balanceInEther)
 	return balanceInEther, nil
 }
