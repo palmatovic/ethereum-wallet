@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 )
 
 // Account rappresenta un account Ethereum
@@ -27,42 +28,168 @@ type Account struct {
 func main() {
 	db := initDatabase()
 
-	for {
-		privateKey, err := generatePrivateKey()
-		if err != nil {
-			fmt.Println("error generating private key:", err)
-			continue
-		}
+	urls := []string{
+		"https://weathered-restless-spree.quiknode.pro/67256ba45eaf985ad6528c8145071d80203bd9b0/",
+		"https://intensive-aged-theorem.quiknode.pro/8f60643fdd3a671086701484c224d97953d429d4/",
+		"https://eth-mainnet.g.alchemy.com/v2/owUCVigVvnHA63o0C6mh3yrf3jxMkV7b",
+		"https://cloudflare-eth.com",
+		"https://main-light.eth.linkpool.io",
+		"https://eth-rpc.gateway.pokt.network",
+		"https://api.mycryptoapi.com/eth",
+		"https://mainnet.eth.cloud.ava.do/",
+		"https://ethereumnodelight.app.runonflux.io",
+		"https://rpc.flashbots.net/",
+		"https://rpc.ankr.com/eth",
+		"https://eth-mainnet.nodereal.io/v1/",
+		"https://eth-mainnet.public.blastapi.io",
+		"https://api.securerpc.com/v1",
+		"https://eth-mainnet.rpcfast.com",
+		"https://1rpc.io/eth",
+		"https://ethereum.publicnode.com",
+		"https://rpc.payload.de",
+		"https://llamanodes.com/",
+		"https://eth.api.onfinality.io/public",
+		"https://eth.merkle.io",
+		"https://eth.drpc.org",
+		"https://public.stackup.sh/api/v1/node/ethereum-mainnet",
+		"https://eth.llamarpc.com",
+		"https://ethereum.blockpi.network/v1/rpc/public",
+		"https://ethereum-rpc.publicnode.com",
+		"https://rpc.eth.gateway.fm",
+		"https://mainnet.gateway.tenderly.co",
+		"https://gateway.tenderly.co/public/mainnet",
+		"https://uk.rpc.blxrbdn.com",
+		"https://go.getblock.io/d9fde9abc97545f4887f56ae54f3c2c0",
+		"https://singapore.rpc.blxrbdn.com",
+		"https://eth.meowrpc.com",
+		"https://rpc.mevblocker.io/fast",
+		"https://rpc.mevblocker.io",
+		"https://eth.rpc.blxrbdn.com",
+		"https://virginia.rpc.blxrbdn.com",
+		"https://eth1.lava.build/lava-referer-16223de7-12c0-49f3-8d87-e5f1e6a0eb3b",
+		"https://core.gashawk.io/rpc",
+		"https://api.stateless.solutions/ethereum/v1/demo",
+		"https://rpc.lokibuilder.xyz/wallet",
+		"https://api.tatum.io/v3/blockchain/node/ethereum-mainnet",
+		"https://eth1.lava.build/lava-referer-ed07f753-8c19-4309-b632-5a4a421aa589",
+		"https://rpc.flashbots.net/fast",
+		"https://rpc.flashbots.net",
+		"https://api.zan.top/node/v1/eth/mainnet/public",
+		"https://eth.nodeconnect.org",
+		"https://eth-pokt.nodies.app",
+		"https://gateway.subquery.network/rpc/eth",
+		"https://rpc.mevblocker.io/fullprivacy",
+		"https://rpc.mevblocker.io/noreverts",
+		"https://ethereum.rpc.subquery.network/public",
+		"https://rpc.builder0x69.io",
+		"https://rpc.blocknative.com/boost",
+		"rpc.nodifi.ai/api/rpc/free",
+		"https://rpc.polysplit.cloud/v1/chain/1",
+		"https://services.tokenview.io/vipapi/nodeservice/eth?apikey=qVHq2o6jpaakcw3lRstl",
+		"https://rpc.notadegen.com/eth",
+		"https://eth-mainnet.diamondswap.org/rpc",
+		"https://rpc.tenderly.co/fork/c63af728-a183-4cfb-b24e-a92801463484",
+		"https://rpc.chain49.com/ethereum?api_key=14d1a8b86d8a4b4797938332394203dc",
+		"https://eth-mainnet.g.alchemy.com/v2/demo",
+		"https://api.zmok.io/mainnet/oaen6dy8ff6hju9k",
+		"https://eth-mainnet-public.unifra.io",
+		"https://openapi.bitstack.com/v1/wNFxbiJyQsSeLrX8RRCHi7NpRxrlErZk/DjShIqLishPCTB9HiMkPHXjUM9CNM9Na/ETH/mainnet",
+		"https://eth-mainnet.nodereal.io/v1/1659dfb40aa24bbb8153a677b98064d7",
+		"https://endpoints.omniatech.io/v1/eth/mainnet/public",
+	}
 
-		address, publicKeyBytes, err := getAddressAndPublicKey(privateKey)
-		if err != nil {
-			fmt.Println("error generating address and public key:", err)
-			continue
-		}
+	// Canale per inviare e ricevere risultati
+	resultChannel := make(chan Account)
 
-		balanceInEther, err := getAccountBalance(address)
-		if err != nil {
-			fmt.Println("error getting account balance:", err)
-			continue
-		}
+	// Goroutine per la comunicazione con il canale principale e l'elaborazione dei risultati
+	go func() {
+		for account := range resultChannel {
+			if account.Balance > 0 {
+				fmt.Println("Account found with balance greater than 0:")
+				fmt.Println("Private Key:", account.PrivateKey)
+				fmt.Println("Public Key:", account.PublicKey)
+				fmt.Println("Address:", account.Address)
+				fmt.Println("Balance:", account.Balance)
 
-		if balanceInEther > 0 {
-			account := Account{
+				// Salva l'account nel database
+				if err := db.Create(&account).Error; err != nil {
+					fmt.Println("error during create account:", err)
+				}
+			}
+		}
+	}()
+
+	// Mutex per la gestione thread-safe delle URL utilizzate
+	var mu sync.Mutex
+	usedUrls := make(map[string]bool) // Mappa per tenere traccia delle URL utilizzate
+
+	// Funzione per segnare una URL come utilizzata in modo thread-safe
+	markUsed := func(url string) {
+		mu.Lock()
+		defer mu.Unlock()
+		usedUrls[url] = true
+	}
+
+	// Funzione per verificare se una URL è stata utilizzata in modo thread-safe
+	isUsed := func(url string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return usedUrls[url]
+	}
+
+	// Canale per limitare il numero di goroutine attive
+	semaphore := make(chan struct{}, len(urls))
+
+	var wg sync.WaitGroup
+	for _, url := range urls {
+		semaphore <- struct{}{} // Acquisisci un semaforo per avviare una nuova goroutine
+		wg.Add(1)
+		go func(url string) {
+			defer func() {
+				<-semaphore // Rilascia il semaforo
+				wg.Done()
+			}()
+
+			privateKey, err := generatePrivateKey()
+			if err != nil {
+				fmt.Println("error generating private key:", err)
+				return
+			}
+
+			address, publicKeyBytes, err := getAddressAndPublicKey(privateKey)
+			if err != nil {
+				fmt.Println("error generating address and public key:", err)
+				return
+			}
+
+			balanceInEther, err := getAccountBalance(url, address)
+			if err != nil {
+				fmt.Printf("error getting account balance from %s: %v\n", url, err)
+				// Se c'è stato un errore, segna questa URL come utilizzata
+				markUsed(url)
+				// Cerca la prima URL libera e utilizzala
+				for _, u := range urls {
+					if !isUsed(u) {
+						balanceInEther, err = getAccountBalance(u, address)
+						if err == nil {
+							url = u
+							break
+						}
+					}
+				}
+			}
+
+			resultChannel <- Account{
 				PrivateKey: hexutil.Encode(crypto.FromECDSA(privateKey)),
 				PublicKey:  hexutil.Encode(publicKeyBytes),
 				Address:    address,
 				Balance:    balanceInEther,
 			}
-			if err := db.Create(&account).Error; err != nil {
-				fmt.Println("error during create account:", err)
-			}
-			fmt.Println("Account found with balance greater than 0:")
-			fmt.Println("Private Key:", account.PrivateKey)
-			fmt.Println("Public Key:", account.PublicKey)
-			fmt.Println("Address:", account.Address)
-			fmt.Println("Balance:", account.Balance)
-		}
+		}(url)
 	}
+
+	wg.Wait()            // Aspetta che tutte le goroutine siano completate
+	close(resultChannel) // Chiudi il canale dei risultati per terminare la goroutine di elaborazione
 }
 
 func initDatabase() *gorm.DB {
@@ -70,12 +197,9 @@ func initDatabase() *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-
-	// Esegui migrazioni per creare la tabella degli account se non esiste già
 	if err := db.AutoMigrate(&Account{}); err != nil {
 		panic(err)
 	}
-
 	return db
 }
 
@@ -94,8 +218,7 @@ func getAddressAndPublicKey(privateKey *ecdsa.PrivateKey) (string, []byte, error
 	return address, publicKeyBytes, nil
 }
 
-func getAccountBalance(address string) (float64, error) {
-	url := "https://weathered-restless-spree.quiknode.pro/67256ba45eaf985ad6528c8145071d80203bd9b0/"
+func getAccountBalance(url string, address string) (float64, error) {
 	payload := map[string]interface{}{
 		"method":  "eth_getBalance",
 		"params":  []interface{}{address, "latest"},
@@ -115,6 +238,10 @@ func getAccountBalance(address string) (float64, error) {
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
