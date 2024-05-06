@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"time"
 )
 
 // Account rappresenta un account Ethereum
@@ -121,72 +120,41 @@ func main() {
 		return usedUrls[url]
 	}
 
-	// Canale per limitare il numero di goroutine attive
-	semaphore := make(chan struct{}, len(urls))
-
 	// Contatore dei successi
 	var successCount int
 
-	var wg sync.WaitGroup
-	for _, url := range urls {
-		semaphore <- struct{}{} // Acquisisci un semaforo per avviare una nuova goroutine
-		wg.Add(1)
-		go func(url string) {
-			defer func() {
-				<-semaphore // Rilascia il semaforo
-				wg.Done()
-			}()
-
+	for {
+		go func() {
 			privateKey, err := generatePrivateKey()
 			if err != nil {
 				fmt.Println("error generating private key:", err)
 				return
 			}
-
 			address, publicKeyBytes, err := getAddressAndPublicKey(privateKey)
 			if err != nil {
 				fmt.Println("error generating address and public key:", err)
 				return
 			}
-
-			balanceInEther, err := getAccountBalance(url, address)
-			if err != nil {
-				fmt.Printf("error getting account balance from %s: %v\n", url, err)
-				// Se c'è stato un errore, segna questa URL come utilizzata
-				markUsed(url)
-				// Cerca la prima URL libera e utilizzala
-				for _, u := range urls {
-					if !isUsed(u) {
-						balanceInEther, err = getAccountBalance(u, address)
-						if err == nil {
-							url = u
-							break
-						}
+			var balanceInEther float64
+			for _, url := range urls {
+				if !isUsed(url) {
+					markUsed(url)
+					balanceInEther, err = getAccountBalance(url, address)
+					if err == nil {
+						successCount++
+						break
 					}
 				}
-			} else {
-				successCount++ // Incrementa il conteggio dei successi
 			}
-
 			resultChannel <- Account{
 				PrivateKey: hexutil.Encode(crypto.FromECDSA(privateKey)),
 				PublicKey:  hexutil.Encode(publicKeyBytes),
 				Address:    address,
 				Balance:    balanceInEther,
 			}
-		}(url)
+		}()
 	}
 
-	// Avvia una goroutine per visualizzare il conteggio dei successi
-	go func() {
-		for {
-			fmt.Printf("Numero di successi finora: %d\n", successCount)
-			time.Sleep(5 * time.Minute) // Aggiorna ogni 5 minuti
-		}
-	}()
-
-	wg.Wait()            // Aspetta che tutte le goroutine siano completate
-	close(resultChannel) // Chiudi il canale dei risultati per terminare la goroutine di elaborazione
 }
 
 func initDatabase() *gorm.DB {
