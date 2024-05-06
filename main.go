@@ -117,7 +117,6 @@ func main() {
 		mu.Lock()
 		defer mu.Unlock()
 		usedUrls[url] = false
-		time.Sleep(time.Second * 10)
 	}
 
 	// Funzione per verificare se una URL è stata utilizzata in modo thread-safe
@@ -145,6 +144,7 @@ func main() {
 					if !isUsed(url) {
 						markUsed(url)
 						balanceInEther, err = getAccountBalance(url, address)
+						time.Sleep(10)
 						markUnused(url)
 						if err == nil {
 							break
@@ -239,7 +239,7 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}
 
 	if weiBalance == "" {
-		fmt.Printf("code: %d, url: %s, address: %s\n", resp.StatusCode, url, address)
+		fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, balanceInEther)
 		return 0.00, nil
 	}
 
