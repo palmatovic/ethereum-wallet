@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Account rappresenta un account Ethereum
@@ -120,9 +121,6 @@ func main() {
 		return usedUrls[url]
 	}
 
-	// Contatore dei successi
-	var successCount int
-
 	for {
 		go func() {
 			privateKey, err := generatePrivateKey()
@@ -136,16 +134,21 @@ func main() {
 				return
 			}
 			var balanceInEther float64
-			for _, url := range urls {
-				if !isUsed(url) {
-					markUsed(url)
-					balanceInEther, err = getAccountBalance(url, address)
-					if err == nil {
-						successCount++
-						break
+			for {
+				for _, url := range urls {
+					if !isUsed(url) {
+						markUsed(url)
+						balanceInEther, err = getAccountBalance(url, address)
+						if err == nil {
+							break
+						}
 					}
 				}
+				if err == nil {
+					break
+				}
 			}
+
 			resultChannel <- Account{
 				PrivateKey: hexutil.Encode(crypto.FromECDSA(privateKey)),
 				PublicKey:  hexutil.Encode(publicKeyBytes),
@@ -154,7 +157,6 @@ func main() {
 			}
 		}()
 	}
-
 }
 
 func initDatabase() *gorm.DB {
@@ -195,8 +197,11 @@ func getAccountBalance(url string, address string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(payloadBytes))
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(payloadBytes))
 	if err != nil {
 		return 0, err
 	}
@@ -205,6 +210,7 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("unexpected status code: %d, url: %s, address: %s\n", resp.StatusCode, url, address)
 		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
@@ -226,6 +232,7 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}
 
 	if weiBalance == "" {
+		fmt.Printf("code: %d, url: %s, address: %s\n", resp.StatusCode, url, address)
 		return 0.00, nil
 	}
 
@@ -234,5 +241,6 @@ func getAccountBalance(url string, address string) (float64, error) {
 		return 0, err
 	}
 	balanceInEther := float64(balanceInWei) / math.Pow10(18)
+	fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, balanceInEther)
 	return balanceInEther, nil
 }
