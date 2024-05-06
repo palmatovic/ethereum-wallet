@@ -239,7 +239,7 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}
 
 	if weiBalance == "" {
-		fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, balanceInEther)
+		fmt.Printf("url: %s, address: %s, balance: %.4f\n", url, address, 0.00)
 		return 0.00, nil
 	}
 
