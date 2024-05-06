@@ -126,8 +126,16 @@ func main() {
 		return usedUrls[url]
 	}
 
+	var semaphore = make(chan struct{}, len(urls))
+	var wg sync.WaitGroup
 	for {
+		wg.Add(1)
+		semaphore <- struct{}{} // Acquire semaphore
 		go func() {
+			defer func() {
+				<-semaphore // Release semaphore
+				wg.Done()
+			}()
 			privateKey, err := generatePrivateKey()
 			if err != nil {
 				fmt.Println("error generating private key:", err)
@@ -171,7 +179,7 @@ func initDatabase() *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
-	if err := db.AutoMigrate(&Account{}); err != nil {
+	if err = db.AutoMigrate(&Account{}); err != nil {
 		panic(err)
 	}
 	return db
