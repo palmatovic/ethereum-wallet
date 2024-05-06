@@ -152,7 +152,6 @@ func main() {
 					if !isUsed(url) {
 						markUsed(url)
 						balanceInEther, err = getAccountBalance(url, address)
-						time.Sleep(10)
 						markUnused(url)
 						if err == nil {
 							break
@@ -223,6 +222,8 @@ func getAccountBalance(url string, address string) (float64, error) {
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	time.Sleep(10 * time.Second)
 
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("unexpected status code: %d, url: %s, address: %s\n", resp.StatusCode, url, address)
