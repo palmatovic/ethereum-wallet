@@ -1,0 +1,54 @@
+version: "3.2"
+
+services:
+  database:
+    image: mysql:latest
+    networks:
+      net:
+        aliases:
+          - database
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: Ethereum
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    labels:
+      - homepage.group=Services
+      - homepage.name=MySQL
+      - homepage.icon=mysql.png
+      - homepage.href=http://<YOUR_LOCALNET_IP>:3306
+      - homepage.description=MySQL
+      - homepage.showStats=true
+    volumes:
+      - database_data:/var/lib/mysql
+
+  wallet:
+    image: wallet:latest
+    ports:
+      - "8080:8080"
+    networks:
+      net:
+        aliases:
+          - wallet
+    environment:
+      DB_USERNAME: app
+      DB_PASSWORD: app
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_SCHEMA: Ethereum
+      SERVER_PORT: 8080
+    labels:
+      - homepage.group=Services
+      - homepage.name=Ethereum Wallet
+      - homepage.icon=go.svg
+      - homepage.href=http://<YOUR_LOCALNET_IP>:<SERVER_PORT>/health
+      - homepage.description=Wallet Scraper
+      - homepage.showStats=true
+
+volumes:
+  database_data:
+
+networks:
+  net:

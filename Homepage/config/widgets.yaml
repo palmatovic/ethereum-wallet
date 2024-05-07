@@ -1,0 +1,31 @@
+- resources:
+    cpu: true
+    memory: true
+    disk:
+      - /
+      #- /mnt/nvme1n1
+      #- /dev/mapper/volumegroup-logicalvolume
+    cputemp: true
+    uptime: true
+    expanded: true
+    #units: imperial # only used by cpu temp
+    refresh: 3000 # optional, in ms
+
+- openweathermap:
+    label: Rome
+    #optional 
+    latitude: 41.902782
+    longitude: 12.496366
+    units: metric # or imperial 
+    provider: openweathermap
+    #apiKey:  # required only if not using provider, 
+    #this reveals api key in requests
+    cache: 5 # Time in minutes to cache API responses, to stay within limits
+
+- datetime:
+    text_size: xs
+#    locale: it
+    format:
+      timeStyle: short
+      hourCycle: h23
+      dateStyle: long

@@ -1,0 +1,9 @@
+---
+# For configuration options and examples, please see: https://gethomepage.dev/latest/configs/services
+#- Services:
+#    - Speedtest Tracker:
+#        icon: speedtest-tracker.png
+#        href: http://192.168.1.65:8080
+#        widget:
+#            type: speedtest
+#            url: http://192.168.1.165:8080

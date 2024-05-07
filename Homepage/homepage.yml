@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  web:
+    image: ghcr.io/gethomepage/homepage:latest
+    ports:
+      - "<UI_PORT>:3000"
+    volumes:
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      network:
+        aliases:
+          - web
+networks:
+  network:

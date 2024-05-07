@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"github.com/gorilla/mux"
+
 	"fmt"
 	"github.com/caarlos0/env/v6"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -24,19 +26,20 @@ import (
 
 // Account rappresenta un account Ethereum
 type Account struct {
-	gorm.Model
-	PrivateKey string `gorm:"unique"`
+	PrivateKey string
 	PublicKey  string
 	Address    string
 	Balance    float64
+	gorm.Model
 }
 
 type Environment struct {
-	Username string `env:"username,required"`
-	Password string `env:"password,required"`
-	Address  string `env:"address,required"`
-	Port     int    `env:"port,required"`
-	Name     string `env:"name,required"`
+	DBUsername string `env:"DB_USERNAME,required"`
+	DBPassword string `env:"DB_PASSWORD,required"`
+	DBHost     string `env:"DB_HOST,required"`
+	DBPort     int    `env:"DB_PORT,required"`
+	DBSchema   string `env:"DB_SCHEMA,required"`
+	ServerPort int    `env:"SERVER_PORT,required"`
 }
 
 func main() {
@@ -47,17 +50,39 @@ func main() {
 		logrus.WithError(err).Panic("cannot configure environment variables")
 	}
 	db := initDatabase(databaseConfig{
-		Username: e.Username,
-		Password: e.Password,
-		Address:  e.Address,
-		Port:     e.Port,
-		Name:     e.Name,
+		Username: e.DBUsername,
+		Password: e.DBPassword,
+		Address:  e.DBHost,
+		Port:     e.DBPort,
+		Name:     e.DBSchema,
 	})
 
+	router := mux.NewRouter()
+	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err = w.Write([]byte(`"message":"running"`)); err != nil {
+			return
+		}
+	})
+
+	go process(db)
+
+	if err = http.ListenAndServe(fmt.Sprintf(":%d", e.ServerPort), router); err != nil {
+		panic(err)
+	}
+}
+
+type databaseConfig struct {
+	Username string
+	Password string
+	Address  string
+	Port     int
+	Name     string
+}
+
+func process(db *gorm.DB) {
+	var err error
 	urls := []string{
-		"https://weathered-restless-spree.quiknode.pro/67256ba45eaf985ad6528c8145071d80203bd9b0/",
-		"https://intensive-aged-theorem.quiknode.pro/8f60643fdd3a671086701484c224d97953d429d4/",
-		"https://powerful-dark-arrow.quiknode.pro/9d597ababb1e41384501769cafa4626f7f51b39f/",
 		"https://eth-mainnet.g.alchemy.com/v2/owUCVigVvnHA63o0C6mh3yrf3jxMkV7b",
 		"https://cloudflare-eth.com",
 		"https://rpc.flashbots.net/",
@@ -143,6 +168,18 @@ func main() {
 	}
 	var semaphore = make(chan struct{}, len(urls))
 	var wg sync.WaitGroup
+	var success int64
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Printf("success: %e\n", float64(success))
+			}
+		}
+	}()
+
 	for {
 		wg.Add(1)
 		semaphore <- struct{}{} // Acquire semaphore
@@ -176,6 +213,7 @@ func main() {
 					}
 				}
 				if err == nil {
+					success++
 					break
 				}
 			}
@@ -187,14 +225,6 @@ func main() {
 			}
 		}()
 	}
-}
-
-type databaseConfig struct {
-	Username string
-	Password string
-	Address  string
-	Port     int
-	Name     string
 }
 
 func initDatabase(dbConfig databaseConfig) *gorm.DB {
@@ -265,9 +295,8 @@ func getAccountBalance(url string, address string) (float64, error) {
 	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == 429 {
-			time.Sleep(time.Second * 30)
-		}
+		//logrus.WithFields(logrus.Fields{"address": address, "url": url}).Warnf("got %d status code", resp.StatusCode)
+		time.Sleep(time.Second * 30)
 		return 0, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 

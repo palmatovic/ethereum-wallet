@@ -1,0 +1,9 @@
+---
+# For configuration options and examples, please see:
+# https://gethomepage.dev/latest/configs/settings
+
+providers:
+  openweathermap: 25271aa6c249bdefd3e96cc507231c96
+  #weatherapi: weatherapiapikey
+
+
