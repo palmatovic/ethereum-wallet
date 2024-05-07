@@ -83,7 +83,6 @@ type databaseConfig struct {
 func process(db *gorm.DB) {
 	var err error
 	urls := []string{
-		"https://eth-mainnet.g.alchemy.com/v2/owUCVigVvnHA63o0C6mh3yrf3jxMkV7b",
 		"https://cloudflare-eth.com",
 		"https://rpc.flashbots.net/",
 		"https://rpc.ankr.com/eth",
